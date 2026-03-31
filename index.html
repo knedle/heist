@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PoE Replica Prices</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0d0d0d;
+      color: #c8b97a;
+      font-family: 'Segoe UI', sans-serif;
+      min-height: 100vh;
+    }
+
+    header {
+      background: linear-gradient(180deg, #1a1208 0%, #0d0d0d 100%);
+      border-bottom: 1px solid #3d2e0e;
+      padding: 1.5rem 2rem;
+      display: flex;
+      align-items: center;
+      gap: 2rem;
+      flex-wrap: wrap;
+    }
+
+    header h1 {
+      font-size: 1.6rem;
+      color: #af6025;
+      text-shadow: 0 0 20px #af602566;
+      white-space: nowrap;
+    }
+    header h1 span { color: #c8b97a; }
+
+    .controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .controls label {
+      font-size: 0.85rem;
+      color: #8a7a50;
+    }
+
+    input[type="text"], input[type="number"] {
+      background: #1a1408;
+      border: 1px solid #3d2e0e;
+      color: #c8b97a;
+      padding: 0.4rem 0.75rem;
+      border-radius: 4px;
+      font-size: 0.9rem;
+      width: 160px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="number"] { width: 80px; }
+    input:focus { border-color: #af6025; }
+
+    button#loadBtn {
+      background: linear-gradient(180deg, #7a3d10 0%, #4a2008 100%);
+      border: 1px solid #af6025;
+      color: #c8b97a;
+      padding: 0.45rem 1.25rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: filter 0.2s;
+    }
+    button#loadBtn:hover { filter: brightness(1.25); }
+    button#loadBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .sort-controls {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+    }
+
+    select {
+      background: #1a1408;
+      border: 1px solid #3d2e0e;
+      color: #c8b97a;
+      padding: 0.4rem 0.6rem;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      outline: none;
+      cursor: pointer;
+    }
+
+    #status {
+      padding: 0.75rem 2rem;
+      font-size: 0.85rem;
+      color: #8a7a50;
+      min-height: 2.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid #3d2e0e;
+      border-top-color: #af6025;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: none;
+    }
+    .spinner.active { display: block; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    #count-badge {
+      background: #2a1a08;
+      border: 1px solid #3d2e0e;
+      border-radius: 20px;
+      padding: 0.15rem 0.6rem;
+      font-size: 0.8rem;
+      color: #af6025;
+    }
+
+    /* Type filter */
+    #type-filter {
+      padding: 0 2rem 0.75rem;
+      display: none;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    #type-filter.visible { display: flex; }
+
+    .type-btn {
+      background: #1a1008;
+      border: 1px solid #3d2e0e;
+      color: #8a7a50;
+      padding: 0.3rem 0.9rem;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .type-btn:hover { border-color: #7a5020; color: #c8b97a; }
+    .type-btn.active {
+      background: #3a1e08;
+      border-color: #af6025;
+      color: #c8b97a;
+    }
+
+    main {
+      padding: 0.5rem 2rem 3rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 1.1rem;
+    }
+
+    .card {
+      background: linear-gradient(160deg, #181008 0%, #0f0a04 100%);
+      border: 1px solid #2e2008;
+      border-radius: 6px;
+      padding: 1rem 1.1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      cursor: pointer;
+      transition: border-color 0.2s, transform 0.15s, box-shadow 0.2s;
+      text-decoration: none;
+    }
+    .card:hover {
+      border-color: #af6025;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 20px #af602528;
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.8rem;
+    }
+
+    .card-icon {
+      width: 52px; height: 52px;
+      object-fit: contain;
+      flex-shrink: 0;
+      image-rendering: pixelated;
+    }
+
+    .card-info { flex: 1; min-width: 0; }
+
+    .card-name {
+      font-size: 0.95rem;
+      color: #af6025;
+      line-height: 1.35;
+      word-break: break-word;
+    }
+    .card-name .replica-word { color: #6eaa6e; }
+
+    .card-base {
+      font-size: 0.78rem;
+      color: #5a4a28;
+      margin-top: 0.2rem;
+    }
+
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 0.15rem;
+      border-top: 1px solid #2e2008;
+      padding-top: 0.5rem;
+    }
+
+    .price {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #c8b97a;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .chaos-icon {
+      width: 20px; height: 20px;
+      object-fit: contain;
+      flex-shrink: 0;
+      image-rendering: pixelated;
+    }
+
+    .links-table {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+      border-top: 1px solid #2e2008;
+      padding-top: 0.45rem;
+      margin-top: 0.1rem;
+    }
+
+    .link-row {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.82rem;
+    }
+
+    .link-label {
+      display: flex;
+      gap: 2px;
+      flex-shrink: 0;
+    }
+    .link-dot {
+      width: 9px; height: 9px;
+      border-radius: 50%;
+      border: 1px solid #555;
+      background: #1a1008;
+    }
+    .link-dot.filled { background: #c8402a; border-color: #e05030; }
+
+    .link-price {
+      font-weight: 700;
+      color: #c8b97a;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+    .link-price img { width: 16px; height: 16px; image-rendering: pixelated; }
+
+    .link-listings {
+      color: #5a4a28;
+      margin-left: auto;
+      font-size: 0.72rem;
+    }
+
+    .listings {
+      font-size: 0.74rem;
+      color: #5a4a28;
+    }
+
+    .change {
+      font-size: 0.78rem;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+    }
+    .change.up   { color: #6eaa6e; background: #0a1a0a; }
+    .change.down { color: #aa4a4a; background: #1a0a0a; }
+    .change.flat { color: #5a4a28; }
+
+    .empty {
+      grid-column: 1 / -1;
+      text-align: center;
+      color: #5a4a28;
+      padding: 4rem;
+      font-size: 1.1rem;
+    }
+
+    .error-msg {
+      color: #aa4a4a;
+      background: #1a0808;
+      border: 1px solid #3a1010;
+      border-radius: 4px;
+      padding: 0.5rem 1rem;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>PoE <span>Replica</span> Prices</h1>
+  <div class="controls">
+    <label>
+      League:
+      <input type="text" id="leagueInput" value="" placeholder="načítám…" />
+    </label>
+    <label>
+      Min. cena (chaos):
+      <input type="number" id="minChaos" value="20" min="0" step="1" />
+    </label>
+    <button id="loadBtn">Načíst</button>
+    <label>
+      Hledat:
+      <input type="text" id="nameFilter" placeholder="název předmětu…" style="width:200px" />
+    </label>
+    <div class="sort-controls">
+      <label>Řadit:
+        <select id="sortSelect">
+          <option value="price-desc">Cena ↓</option>
+          <option value="price-asc">Cena ↑</option>
+          <option value="name-asc">Název A–Z</option>
+          <option value="listings-desc">Počet listingů ↓</option>
+        </select>
+      </label>
+    </div>
+  </div>
+</header>
+
+<div id="status">
+  <div class="spinner" id="spinner"></div>
+  <span id="statusText">Zjišťuji aktuální ligu…</span>
+  <span id="count-badge" style="display:none"></span>
+</div>
+
+<div id="type-filter"></div>
+
+<main>
+  <div class="grid" id="grid"></div>
+</main>
+
+<script>
+const CATEGORIES = [
+  'UniqueWeapon',
+  'UniqueArmour',
+  'UniqueAccessory',
+  'UniqueFlask',
+  'UniqueJewel',
+];
+
+const CATEGORY_LABELS = {
+  UniqueWeapon:    'Zbraně',
+  UniqueArmour:    'Brnění',
+  UniqueAccessory: 'Doplňky',
+  UniqueFlask:     'Flašky',
+  UniqueJewel:     'Klenoty',
+};
+
+async function fetchCategory(league, type) {
+  const url = `/api/poeninja/itemoverview?league=${encodeURIComponent(league)}&type=${type}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`${type}: HTTP ${res.status}`);
+  const json = await res.json();
+  return json.lines || [];
+}
+
+function categorySlug(type) {
+  const map = {
+    UniqueWeapon:    'weapons',
+    UniqueArmour:    'armours',
+    UniqueAccessory: 'accessories',
+    UniqueFlask:     'flasks',
+    UniqueJewel:     'jewels',
+  };
+  return map[type] || 'weapons';
+}
+
+function sortItems(items, mode) {
+  const sorted = [...items];
+  if (mode === 'price-desc')    sorted.sort((a, b) => b.chaosValue - a.chaosValue);
+  else if (mode === 'price-asc') sorted.sort((a, b) => a.chaosValue - b.chaosValue);
+  else if (mode === 'name-asc') sorted.sort((a, b) => a.name.localeCompare(b.name));
+  else if (mode === 'listings-desc') sorted.sort((a, b) => (b.listingCount ?? 0) - (a.listingCount ?? 0));
+  return sorted;
+}
+
+let allItems = [];
+let activeType = 'all';
+
+function renderTypeFilter() {
+  const bar = document.getElementById('type-filter');
+  const presentTypes = [...new Set(allItems.map(i => i._category))];
+
+  if (presentTypes.length === 0) { bar.classList.remove('visible'); return; }
+
+  bar.innerHTML = '';
+  bar.classList.add('visible');
+
+  const types = ['all', ...CATEGORIES.filter(c => presentTypes.includes(c))];
+  for (const type of types) {
+    const btn = document.createElement('button');
+    btn.className = 'type-btn' + (type === activeType ? ' active' : '');
+    const count = type === 'all' ? allItems.length : allItems.filter(i => i._category === type).length;
+    btn.textContent = (type === 'all' ? 'Vše' : CATEGORY_LABELS[type]) + ` (${count})`;
+    btn.addEventListener('click', () => {
+      activeType = type;
+      document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      applyAndRender();
+    });
+    bar.appendChild(btn);
+  }
+}
+
+function applyAndRender() {
+  const league = document.getElementById('leagueInput').value.trim();
+  const nameQuery = document.getElementById('nameFilter').value.trim().toLowerCase();
+  let filtered = activeType === 'all' ? allItems : allItems.filter(i => i._category === activeType);
+  if (nameQuery) filtered = filtered.filter(i => i.name.toLowerCase().includes(nameQuery));
+  const sorted = sortItems(filtered, document.getElementById('sortSelect').value);
+  renderCards(sorted, league);
+  document.getElementById('count-badge').textContent = `${sorted.length} replik`;
+}
+
+function linkDots(n) {
+  let html = '<span class="link-label">';
+  for (let i = 0; i < 6; i++) {
+    html += `<span class="link-dot${i < n ? ' filled' : ''}"></span>`;
+  }
+  return html + '</span>';
+}
+
+function linkRow(links, chaosValue, listingCount) {
+  const label = links === 0 ? linkDots(0) : linkDots(links);
+  const listings = listingCount ?? 0;
+  return `
+    <div class="link-row">
+      ${label}
+      <span class="link-price">
+        ${Math.round(chaosValue)}
+        <img src="/CurrencyRerollRare.png" alt="c" title="Chaos orbs">
+      </span>
+      <span class="link-listings">${listings}× listing</span>
+    </div>`;
+}
+
+function renderCards(items, league) {
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+
+  if (items.length === 0) {
+    grid.innerHTML = '<div class="empty">Žádné repliky nad tuto cenu.</div>';
+    return;
+  }
+
+  for (const item of items) {
+    const change = item.sparkLine?.totalChange ?? 0;
+    const changeClass = change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
+    const changeSign = change > 0 ? '+' : '';
+    const poeNinjaUrl = `https://poe.ninja/poe1/economy/${encodeURIComponent(league.toLowerCase())}/unique-${categorySlug(item._category)}/${item.detailsId}`;
+    const nameParts = item.name.replace(/^(Replica) /, '<span class="replica-word">$1</span> ');
+    const hasLinks = item._linkVariants && item._linkVariants.length > 0;
+
+    let linksHtml = '';
+    if (hasLinks) {
+      linksHtml = '<div class="links-table">';
+      linksHtml += linkRow(item.links ?? 0, item.chaosValue, item.listingCount ?? item.count);
+      for (const v of item._linkVariants) {
+        linksHtml += linkRow(v.links ?? 0, v.chaosValue, v.listingCount ?? v.count);
+      }
+      linksHtml += '</div>';
+    }
+
+    const card = document.createElement('a');
+    card.className = 'card';
+    card.href = poeNinjaUrl;
+    card.target = '_blank';
+    card.rel = 'noopener noreferrer';
+    card.innerHTML = `
+      <div class="card-top">
+        ${item.icon ? `<img class="card-icon" src="${item.icon}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
+        <div class="card-info">
+          <div class="card-name">${nameParts}</div>
+          <div class="card-base">${item.baseType || ''}</div>
+        </div>
+      </div>
+      ${hasLinks ? linksHtml : `
+      <div class="card-footer">
+        <div class="price">
+          ${Math.round(item.chaosValue)}
+          <img class="chaos-icon" src="/CurrencyRerollRare.png" alt="c" title="Chaos orbs">
+        </div>
+        <span class="change ${changeClass}">${changeSign}${change.toFixed(0)}%</span>
+        <span class="listings">${item.listingCount ?? item.count ?? 0}× listing</span>
+      </div>`}
+    `;
+    grid.appendChild(card);
+  }
+}
+
+async function load() {
+  const league = document.getElementById('leagueInput').value.trim();
+  const minChaos = parseFloat(document.getElementById('minChaos').value) || 0;
+  if (!league) { alert('Zadej název ligy.'); return; }
+
+  const btn = document.getElementById('loadBtn');
+  const spinner = document.getElementById('spinner');
+  const statusText = document.getElementById('statusText');
+  const badge = document.getElementById('count-badge');
+
+  btn.disabled = true;
+  spinner.classList.add('active');
+  badge.style.display = 'none';
+  document.getElementById('grid').innerHTML = '';
+  document.getElementById('type-filter').classList.remove('visible');
+  statusText.textContent = 'Načítám data z poe.ninja…';
+
+  const errors = [];
+  const results = [];
+
+  await Promise.all(CATEGORIES.map(async (cat) => {
+    try {
+      const lines = await fetchCategory(league, cat);
+      lines.forEach(item => {
+        if (item.name && item.name.includes('Replica')) {
+          item._category = cat;
+          results.push(item);
+        }
+      });
+    } catch (e) {
+      errors.push(e.message);
+    }
+  }));
+
+  // Skupuj varianty (0L/5L/6L) pod jeden záznam
+  const grouped = new Map();
+  for (const item of results) {
+    const key = item._category + '||' + item.name;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(item);
+  }
+
+  const merged = [];
+  for (const variants of grouped.values()) {
+    variants.sort((a, b) => (a.links ?? 0) - (b.links ?? 0));
+    const primary = variants[0]; // nejnižší links (0L nebo jediný)
+    primary._linkVariants = variants.slice(1); // 5L, 6L, ...
+    merged.push(primary);
+  }
+
+  allItems = merged.filter(item => item.chaosValue >= minChaos);
+  activeType = 'all';
+
+  renderTypeFilter();
+  applyAndRender();
+
+  badge.style.display = 'inline';
+
+  if (errors.length) {
+    statusText.innerHTML = `<span class="error-msg">Chyby: ${errors.join(', ')}</span>`;
+  } else {
+    statusText.textContent = `Hotovo — liga "${league}", min. ${minChaos}c.`;
+  }
+
+  btn.disabled = false;
+  spinner.classList.remove('active');
+}
+
+document.getElementById('loadBtn').addEventListener('click', load);
+document.getElementById('sortSelect').addEventListener('change', applyAndRender);
+document.getElementById('leagueInput').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
+document.getElementById('nameFilter').addEventListener('input', applyAndRender);
+
+// Auto-detect current league
+const SKIP_LEAGUES = new Set(['Standard', 'Hardcore', 'SSF Standard', 'SSF Hardcore']);
+
+async function detectCurrentLeague() {
+  const input = document.getElementById('leagueInput');
+  const statusText = document.getElementById('statusText');
+  try {
+    const res = await fetch('/api/leagues');
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    const leagues = data.result ?? data;
+    const challenge = leagues.find(l =>
+      !SKIP_LEAGUES.has(l.id) &&
+      !l.id.startsWith('SSF ') &&
+      !l.id.startsWith('Hardcore ')
+    );
+    if (challenge) {
+      input.value = challenge.id;
+      statusText.textContent = `Liga: ${challenge.id} — klikni Načíst.`;
+    } else {
+      input.value = 'Standard';
+      statusText.textContent = 'Liga nenalezena, použit Standard.';
+    }
+  } catch (e) {
+    input.value = 'Standard';
+    statusText.textContent = 'Chyba zjištění ligy: ' + e.message;
+  }
+}
+
+detectCurrentLeague();
+</script>
+
+</body>
+</html>

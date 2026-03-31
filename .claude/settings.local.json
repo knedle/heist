@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:poe.ninja)",
+      "Bash(docker compose:*)"
+    ]
+  }
+}

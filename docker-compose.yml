@@ -1,0 +1,11 @@
+services:
+  poe-heist:
+    image: node:22-alpine
+    container_name: poe-replica-tracker
+    working_dir: /app
+    volumes:
+      - .:/app
+    command: node server.js
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
