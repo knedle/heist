@@ -382,8 +382,7 @@ function renderTypeFilter() {
   for (const type of ['all', ...CATEGORIES.filter(c => presentTypes.includes(c))]) {
     const btn = document.createElement('button');
     btn.className = 'type-btn' + (type === activeType ? ' active' : '');
-    const count = type === 'all' ? allItems.length : allItems.filter(i => i._category === type).length;
-    btn.textContent = (type === 'all' ? 'All' : CATEGORY_LABELS[type]) + ` (${count})`;
+    btn.dataset.type = type;
     btn.addEventListener('click', () => {
       activeType = type;
       document.querySelectorAll('.type-btn').forEach(b => b.classList.remove('active'));
@@ -399,9 +398,22 @@ let minChaosFilter = 20;
 function applyAndRender() {
   const league = document.getElementById('leagueInput').value.trim();
   const nameQuery = document.getElementById('nameFilter').value.trim().toLowerCase();
-  let filtered = activeType === 'all' ? allItems : allItems.filter(i => i._category === activeType);
-  if (minChaosFilter > 0) filtered = filtered.filter(i => i.chaosValue >= minChaosFilter);
-  if (nameQuery) filtered = filtered.filter(i => i.name.toLowerCase().includes(nameQuery));
+
+  // Pre-filtered = price + name, before type filter (used for button counts)
+  let preFiltered = allItems;
+  if (minChaosFilter > 0) preFiltered = preFiltered.filter(i => i.chaosValue >= minChaosFilter);
+  if (nameQuery) preFiltered = preFiltered.filter(i => i.name.toLowerCase().includes(nameQuery));
+
+  // Update button counts: X of Y
+  document.querySelectorAll('.type-btn').forEach(btn => {
+    const type = btn.dataset.type;
+    const total = type === 'all' ? allItems.length : allItems.filter(i => i._category === type).length;
+    const visible = type === 'all' ? preFiltered.length : preFiltered.filter(i => i._category === type).length;
+    const label = type === 'all' ? 'All' : CATEGORY_LABELS[type];
+    btn.textContent = `${label} (${visible} of ${total})`;
+  });
+
+  const filtered = activeType === 'all' ? preFiltered : preFiltered.filter(i => i._category === activeType);
   const sorted = sortItems(filtered, document.getElementById('sortSelect').value);
   renderCards(sorted, league);
   document.getElementById('count-badge').textContent = `${sorted.length} replicas`;
