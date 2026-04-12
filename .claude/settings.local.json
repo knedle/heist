@@ -3,7 +3,12 @@
     "allow": [
       "WebFetch(domain:poe.ninja)",
       "Bash(docker compose:*)",
-      "Bash(docker-compose restart:*)"
+      "Bash(docker-compose restart:*)",
+      "WebFetch(domain:www.poewiki.net)",
+      "WebFetch(domain:pathofexile.fandom.com)",
+      "WebSearch",
+      "WebFetch(domain:www.vhpg.com)",
+      "Bash(docker exec poe-replica-tracker:*)"
     ]
   }
 }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PoE Replica Prices</title>
+  <title>POE Heist prices</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -17,7 +17,13 @@
     header {
       background: linear-gradient(180deg, #ede5d0 0%, #f4efe6 100%);
       border-bottom: 2px solid #c8a870;
-      padding: 1.5rem 2rem;
+      padding: 1.25rem 2rem 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+
+    .header-top {
       display: flex;
       align-items: center;
       gap: 2rem;
@@ -31,6 +37,30 @@
       white-space: nowrap;
     }
     header h1 span { color: #1a0e04; }
+
+    .tab-nav {
+      display: flex;
+      gap: 0.45rem;
+      align-items: center;
+    }
+
+    .tab-btn {
+      background: #ede5d0;
+      border: 1px solid #c8a870;
+      color: #6a5030;
+      padding: 0.4rem 1.15rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.88rem;
+      font-family: inherit;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { border-color: #7a3010; color: #1a0e04; background: #e0d4b8; }
+    .tab-btn.active {
+      background: linear-gradient(180deg, #c87830 0%, #7a3010 100%);
+      border-color: #7a3010;
+      color: #fffdf5;
+    }
 
     .controls {
       display: flex;
@@ -285,7 +315,13 @@
 <body>
 
 <header>
-  <h1>PoE <span>Replica</span> Prices</h1>
+  <div class="header-top">
+    <h1>POE <span>Heist</span> prices</h1>
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="replicas">Repliky</button>
+      <button class="tab-btn" data-tab="experimented">Experimented Items</button>
+    </nav>
+  </div>
   <div class="controls">
     <label>League:</label>
     <input type="text" id="leagueInput" value="" placeholder="detecting…" />
@@ -318,27 +354,38 @@
 </div>
 
 <main>
+  <div id="exp-notice" style="display:none; padding: 0 0 0.75rem; font-size: 0.83rem; color: #6a5030; font-style: italic;">
+    Indicative prices — item level 83 &amp; 84, no influence
+  </div>
   <div class="grid" id="grid"></div>
 </main>
 
 <script>
-const CATEGORIES = ['UniqueWeapon', 'UniqueArmour', 'UniqueAccessory', 'UniqueFlask', 'UniqueJewel'];
+const REPLICA_CATEGORIES = ['UniqueWeapon', 'UniqueArmour', 'UniqueAccessory', 'UniqueFlask', 'UniqueJewel'];
 
 const CATEGORY_LABELS = {
-  UniqueWeapon:    'Weapons',
-  UniqueArmour:    'Armour',
-  UniqueAccessory: 'Accessories',
-  UniqueFlask:     'Flasks',
-  UniqueJewel:     'Jewels',
+  UniqueWeapon: 'Weapons', UniqueArmour: 'Armour',
+  UniqueAccessory: 'Accessories', UniqueFlask: 'Flasks', UniqueJewel: 'Jewels',
+  '1H Weapon': '1H Weapons', '2H Weapon': '2H Weapons',
+  'Armour': 'Armour', 'Accessory': 'Accessories',
 };
 
+const EXP_CATEGORY_ORDER = ['1H Weapon', '2H Weapon', 'Armour', 'Accessory'];
+
 const CACHE_TTL = 60 * 60 * 1000;
-let refreshBlockedUntil = 0;
+const refreshBlockedUntil = { replicas: 0, experimented: 0 };
 let btnInterval = null;
+
+let currentTab = 'replicas';
+let replicaItems = [];
+let experimentedItems = [];
+let allItems = [];
+let activeType = 'all';
+let minChaosFilter = 20;
 
 function updateLoadBtn() {
   const btn = document.getElementById('loadBtn');
-  const remaining = refreshBlockedUntil - Date.now();
+  const remaining = refreshBlockedUntil[currentTab] - Date.now();
   if (remaining > 0) {
     const mins = Math.ceil(remaining / 60000);
     btn.disabled = true;
@@ -359,16 +406,13 @@ function categorySlug(type) {
 
 function sortItems(items, mode) {
   const sorted = [...items];
-  if (mode === 'price-desc')       sorted.sort((a, b) => b.chaosValue - a.chaosValue);
-  else if (mode === 'price-asc')   sorted.sort((a, b) => a.chaosValue - b.chaosValue);
-  else if (mode === 'name-asc')    sorted.sort((a, b) => a.name.localeCompare(b.name));
+  if (mode === 'price-desc')         sorted.sort((a, b) => b.chaosValue - a.chaosValue);
+  else if (mode === 'price-asc')     sorted.sort((a, b) => a.chaosValue - b.chaosValue);
+  else if (mode === 'name-asc')      sorted.sort((a, b) => a.name.localeCompare(b.name));
   else if (mode === 'listings-desc') sorted.sort((a, b) => (b.listingCount ?? 0) - (a.listingCount ?? 0));
   else if (mode === 'listings-asc')  sorted.sort((a, b) => (a.listingCount ?? 0) - (b.listingCount ?? 0));
   return sorted;
 }
-
-let allItems = [];
-let activeType = 'all';
 
 function renderTypeFilter() {
   const bar = document.getElementById('type-filter');
@@ -376,10 +420,16 @@ function renderTypeFilter() {
 
   const presentTypes = [...new Set(allItems.map(i => i._category))];
   if (presentTypes.length === 0) { bar.classList.remove('visible'); return; }
-
   bar.classList.add('visible');
 
-  for (const type of ['all', ...CATEGORIES.filter(c => presentTypes.includes(c))]) {
+  let orderedTypes;
+  if (currentTab === 'replicas') {
+    orderedTypes = REPLICA_CATEGORIES.filter(c => presentTypes.includes(c));
+  } else {
+    orderedTypes = EXP_CATEGORY_ORDER.filter(c => presentTypes.includes(c));
+  }
+
+  for (const type of ['all', ...orderedTypes]) {
     const btn = document.createElement('button');
     btn.className = 'type-btn' + (type === activeType ? ' active' : '');
     btn.dataset.type = type;
@@ -393,30 +443,27 @@ function renderTypeFilter() {
   }
 }
 
-let minChaosFilter = 20;
-
 function applyAndRender() {
   const league = document.getElementById('leagueInput').value.trim();
   const nameQuery = document.getElementById('nameFilter').value.trim().toLowerCase();
 
-  // Pre-filtered = price + name, before type filter (used for button counts)
   let preFiltered = allItems;
   if (minChaosFilter > 0) preFiltered = preFiltered.filter(i => i.chaosValue >= minChaosFilter);
   if (nameQuery) preFiltered = preFiltered.filter(i => i.name.toLowerCase().includes(nameQuery));
 
-  // Update button counts: X of Y
   document.querySelectorAll('.type-btn').forEach(btn => {
     const type = btn.dataset.type;
-    const total = type === 'all' ? allItems.length : allItems.filter(i => i._category === type).length;
+    const total   = type === 'all' ? allItems.length    : allItems.filter(i => i._category === type).length;
     const visible = type === 'all' ? preFiltered.length : preFiltered.filter(i => i._category === type).length;
-    const label = type === 'all' ? 'All' : CATEGORY_LABELS[type];
+    const label   = type === 'all' ? 'All' : (CATEGORY_LABELS[type] || type);
     btn.textContent = `${label} (${visible} of ${total})`;
   });
 
   const filtered = activeType === 'all' ? preFiltered : preFiltered.filter(i => i._category === activeType);
   const sorted = sortItems(filtered, document.getElementById('sortSelect').value);
   renderCards(sorted, league);
-  document.getElementById('count-badge').textContent = `${sorted.length} replicas`;
+  const badge = document.getElementById('count-badge');
+  badge.textContent = currentTab === 'replicas' ? `${sorted.length} replicas` : `${sorted.length} items`;
 }
 
 function linkDots(n) {
@@ -442,7 +489,8 @@ function renderCards(items, league) {
   grid.innerHTML = '';
 
   if (items.length === 0) {
-    grid.innerHTML = '<div class="empty">No replicas above this price.</div>';
+    const msg = currentTab === 'replicas' ? 'No replicas above this price.' : 'No experimented items found.';
+    grid.innerHTML = `<div class="empty">${msg}</div>`;
     return;
   }
 
@@ -450,9 +498,20 @@ function renderCards(items, league) {
     const change = item.sparkLine?.totalChange ?? 0;
     const changeClass = change > 0 ? 'up' : change < 0 ? 'down' : 'flat';
     const changeSign = change > 0 ? '+' : '';
-    const poeNinjaUrl = `https://poe.ninja/poe1/economy/${encodeURIComponent(league.toLowerCase())}/unique-${categorySlug(item._category)}/${item.detailsId}`;
-    const nameParts = item.name.replace(/^(Replica) /, '<span class="replica-word">$1</span> ');
-    const hasLinks = item._linkVariants && item._linkVariants.length > 0;
+
+    let poeNinjaUrl, nameParts, baseDisplay;
+
+    if (currentTab === 'replicas') {
+      poeNinjaUrl = `https://poe.ninja/poe1/economy/${encodeURIComponent(league.toLowerCase())}/unique-${categorySlug(item._category)}/${item.detailsId}`;
+      nameParts = item.name.replace(/^(Replica) /, '<span class="replica-word">$1</span> ');
+      baseDisplay = item.baseType || '';
+    } else {
+      poeNinjaUrl = `https://poe.ninja/poe1/economy/${encodeURIComponent(league.toLowerCase())}/base-type/${item.detailsId}`;
+      nameParts = item.name;
+      baseDisplay = (item.itemType || item._category || '') + (item.levelRequired ? ` · ilvl ${item.levelRequired}` : '');
+    }
+
+    const hasLinks = currentTab === 'replicas' && item._linkVariants && item._linkVariants.length > 0;
 
     let linksHtml = '';
     if (hasLinks) {
@@ -472,7 +531,7 @@ function renderCards(items, league) {
         ${item.icon ? `<img class="card-icon" src="${item.icon}" alt="" loading="lazy" onerror="this.style.display='none'">` : ''}
         <div class="card-info">
           <div class="card-name">${nameParts}</div>
-          <div class="card-base">${item.baseType || ''}</div>
+          <div class="card-base">${baseDisplay}</div>
         </div>
       </div>
       ${hasLinks ? linksHtml : `
@@ -487,6 +546,23 @@ function renderCards(items, league) {
     `;
     grid.appendChild(card);
   }
+}
+
+function processReplicaItems(rawItems) {
+  const grouped = new Map();
+  for (const item of rawItems) {
+    const key = item._category + '||' + item.name;
+    if (!grouped.has(key)) grouped.set(key, []);
+    grouped.get(key).push(item);
+  }
+  const merged = [];
+  for (const variants of grouped.values()) {
+    variants.sort((a, b) => (a.links ?? 0) - (b.links ?? 0));
+    const primary = variants[0];
+    primary._linkVariants = variants.slice(1);
+    merged.push(primary);
+  }
+  return merged;
 }
 
 async function load() {
@@ -506,35 +582,31 @@ async function load() {
   document.getElementById('type-filter').classList.remove('visible');
   statusText.textContent = 'Loading data from poe.ninja…';
 
+  const endpoint = currentTab === 'replicas'
+    ? `/api/data?league=${encodeURIComponent(league)}`
+    : `/api/experimented?league=${encodeURIComponent(league)}`;
+
   try {
-    const res = await fetch(`/api/data?league=${encodeURIComponent(league)}`);
+    const res = await fetch(endpoint);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
 
-    // Group link variants under one entry
-    const grouped = new Map();
-    for (const item of (data.items || [])) {
-      const key = item._category + '||' + item.name;
-      if (!grouped.has(key)) grouped.set(key, []);
-      grouped.get(key).push(item);
+    let processed;
+    if (currentTab === 'replicas') {
+      processed = processReplicaItems(data.items || []);
+      replicaItems = processed;
+    } else {
+      processed = data.items || [];
+      experimentedItems = processed;
     }
-
-    const merged = [];
-    for (const variants of grouped.values()) {
-      variants.sort((a, b) => (a.links ?? 0) - (b.links ?? 0));
-      const primary = variants[0];
-      primary._linkVariants = variants.slice(1);
-      merged.push(primary);
-    }
-
-    allItems = merged;
+    allItems = processed;
     activeType = 'all';
 
     renderTypeFilter();
     applyAndRender();
     badge.style.display = 'inline';
 
-    refreshBlockedUntil = data.timestamp + CACHE_TTL;
+    refreshBlockedUntil[currentTab] = data.timestamp + CACHE_TTL;
     if (btnInterval) clearInterval(btnInterval);
     btnInterval = setInterval(updateLoadBtn, 30000);
     updateLoadBtn();
@@ -554,6 +626,32 @@ async function load() {
   }
 }
 
+function switchTab(tab) {
+  currentTab = tab;
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.tab === tab);
+  });
+
+  allItems = tab === 'replicas' ? replicaItems : experimentedItems;
+  activeType = 'all';
+
+  updateLoadBtn();
+  document.getElementById('exp-notice').style.display = tab === 'experimented' ? 'block' : 'none';
+
+  if (allItems.length > 0) {
+    renderTypeFilter();
+    applyAndRender();
+    document.getElementById('count-badge').style.display = 'inline';
+  } else {
+    document.getElementById('grid').innerHTML = '';
+    document.getElementById('type-filter').classList.remove('visible');
+    document.getElementById('count-badge').style.display = 'none';
+    const league = document.getElementById('leagueInput').value;
+    document.getElementById('statusText').textContent =
+      `League: ${league} — no data yet, click Load.`;
+  }
+}
+
 document.getElementById('loadBtn').addEventListener('click', load);
 document.getElementById('filterBtn').addEventListener('click', () => {
   minChaosFilter = parseFloat(document.getElementById('minChaos').value) || 0;
@@ -562,6 +660,9 @@ document.getElementById('filterBtn').addEventListener('click', () => {
 document.getElementById('sortSelect').addEventListener('change', applyAndRender);
 document.getElementById('leagueInput').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
 document.getElementById('nameFilter').addEventListener('input', applyAndRender);
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+});
 
 const SKIP_LEAGUES = new Set(['Standard', 'Hardcore', 'SSF Standard', 'SSF Hardcore']);
 
@@ -569,7 +670,6 @@ async function detectCurrentLeague() {
   const input = document.getElementById('leagueInput');
   const statusText = document.getElementById('statusText');
 
-  // Detect league
   try {
     const res = await fetch('/api/leagues');
     if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -585,7 +685,6 @@ async function detectCurrentLeague() {
     return;
   }
 
-  // Check cache status
   const league = input.value;
   try {
     const res = await fetch(`/api/cache-status?league=${encodeURIComponent(league)}`);
@@ -596,8 +695,8 @@ async function detectCurrentLeague() {
       const ageMins = Math.round((Date.now() - status.timestamp) / 60000);
       statusText.innerHTML = `League: ${league} — <strong>data is ${ageMins}m old</strong>, click Load to refresh.`;
     } else {
-      refreshBlockedUntil = status.timestamp + CACHE_TTL;
-      load(); // auto-load from cache, button stays disabled after
+      refreshBlockedUntil.replicas = status.timestamp + CACHE_TTL;
+      load();
     }
   } catch (e) {
     statusText.textContent = `League: ${league} — click Load to fetch data.`;

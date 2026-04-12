@@ -12,6 +12,50 @@ try { if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR); } catch (e) { cons
 
 const CATEGORIES = ['UniqueWeapon', 'UniqueArmour', 'UniqueAccessory', 'UniqueFlask', 'UniqueJewel'];
 
+const EXPERIMENTED_BASE_TYPES = new Set([
+  // One-Hand Axes
+  'Disapprobation Axe', 'Psychotic Axe',
+  // Two-Hand Axes
+  'Honed Cleaver', 'Apex Cleaver',
+  // Bows
+  'Foundry Bow', 'Solarine Bow',
+  // Claws
+  'Malign Fangs', 'Void Fangs',
+  // Daggers (generic)
+  'Pressurised Dagger', 'Pneumatic Dagger',
+  // Daggers (rune)
+  'Flashfire Blade', 'Infernal Blade',
+  // One-Hand Maces
+  'Crack Mace', 'Boom Mace',
+  // Two-Hand Maces
+  'Crushing Force Magnifier', 'Impact Force Propagator',
+  // Sceptres
+  'Oscillating Sceptre', 'Stabilising Sceptre', 'Alternating Sceptre',
+  // Staves
+  'Reciprocation Staff', 'Battery Staff',
+  // War Staves
+  'Potentiality Rod', 'Eventuality Rod',
+  // One-Hand Swords
+  'Capricious Spiritblade', 'Anarchic Spiritblade',
+  // Two-Hand Swords
+  'Blasting Blade', 'Banishing Blade',
+  // Wands
+  'Congregator Wand', 'Accumulator Wand',
+  // Shields (Str)
+  'Magmatic Tower Shield', 'Heat-attuned Tower Shield',
+  // Shields (Dex)
+  'Polar Buckler', 'Cold-attuned Buckler',
+  // Shields (Int)
+  'Subsuming Spirit Shield', 'Transfer-attuned Spirit Shield',
+  // Belts
+  'Micro-Distillery Belt', 'Mechanical Belt',
+  // Amulets
+  'Focused Amulet', 'Simplex Amulet', 'Astrolabe Amulet',
+  // Rings
+  'Cogwork Ring', 'Composite Ring', 'Geodesic Ring',
+  'Helical Ring', 'Manifold Ring', 'Ratcheting Ring',
+]);
+
 function fetchJson(targetUrl, redirects = 0) {
   return new Promise((resolve, reject) => {
     if (redirects > 5) return reject(new Error('Too many redirects'));
@@ -78,6 +122,54 @@ const server = http.createServer((req, res) => {
     } catch (e) { }
     res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
     res.end(JSON.stringify({ timestamp: null, fresh: false }));
+    return;
+  }
+
+  // Experimented base types data
+  if (pathname === '/api/experimented') {
+    const league = parsedUrl.query.league;
+    if (!league) { res.writeHead(400); res.end(JSON.stringify({ error: 'missing league' })); return; }
+
+    const cachePath = path.join(CACHE_DIR, 'exp_' + league.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
+
+    try {
+      if (fs.existsSync(cachePath)) {
+        const cached = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+        if (Date.now() - cached.timestamp < CACHE_TTL) {
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify({ ...cached, fromCache: true }));
+          return;
+        }
+      }
+    } catch (e) {}
+
+    (async () => {
+      try {
+        const data = await fetchJson(
+          `https://poe.ninja/poe1/api/economy/stash/current/item/overview?league=${encodeURIComponent(league)}&type=BaseType`
+        );
+
+        const EXP_CATEGORY = t => {
+          if (['One Handed Sword','One Handed Axe','One Handed Mace','Dagger','Claw','Wand','Sceptre'].includes(t)) return '1H Weapon';
+          if (['Two Handed Sword','Two Handed Axe','Two Handed Mace','Staff','War Staff','Bow'].includes(t)) return '2H Weapon';
+          if (t === 'Shield') return 'Armour';
+          if (['Belt','Ring','Amulet'].includes(t)) return 'Accessory';
+          return 'Other';
+        };
+
+        const items = (data.lines || [])
+          .filter(item => EXPERIMENTED_BASE_TYPES.has(item.name) && !item.variant && (item.levelRequired === 83 || item.levelRequired === 84))
+          .map(item => ({ ...item, _category: EXP_CATEGORY(item.itemType) }));
+
+        const payload = { timestamp: Date.now(), items, errors: [] };
+        try { fs.writeFileSync(cachePath, JSON.stringify(payload)); } catch (e) {}
+
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify({ ...payload, fromCache: false }));
+      } catch (e) {
+        res.writeHead(500); res.end(JSON.stringify({ error: e.message }));
+      }
+    })().catch(e => { res.writeHead(500); res.end(JSON.stringify({ error: e.message })); });
     return;
   }
 
