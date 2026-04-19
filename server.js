@@ -158,7 +158,7 @@ const server = http.createServer((req, res) => {
         };
 
         const items = (data.lines || [])
-          .filter(item => EXPERIMENTED_BASE_TYPES.has(item.name) && !item.variant && (item.levelRequired === 83 || item.levelRequired === 84))
+          .filter(item => EXPERIMENTED_BASE_TYPES.has(item.name) && !item.variant && item.levelRequired >= 82 && item.levelRequired <= 86)
           .map(item => ({ ...item, _category: EXP_CATEGORY(item.itemType) }));
 
         const payload = { timestamp: Date.now(), items, errors: [] };

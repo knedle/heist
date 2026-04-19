@@ -174,7 +174,45 @@
     }
     #type-filter.visible { display: flex; }
 
-    #nameFilter { width: 200px; }
+    #nameFilter { width: 200px; padding-right: 1.8rem; }
+
+    .search-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .clear-btn {
+      position: absolute;
+      right: 0.4rem;
+      background: none;
+      border: none;
+      color: #a08050;
+      cursor: pointer;
+      font-size: 1.15rem;
+      line-height: 1;
+      padding: 0 0.1rem;
+      display: none;
+    }
+    .clear-btn:hover { color: #7a3010; }
+    .clear-btn.visible { display: block; }
+
+    .ilvl-group { display: flex; align-items: center; gap: 0.3rem; }
+    .ilvl-label { font-size: 0.78rem; color: #8a6840; font-weight: 600; white-space: nowrap; }
+    .ilvl-btn {
+      background: #ede5d0;
+      border: 1px solid #c8a870;
+      color: #6a5030;
+      padding: 0.25rem 0.55rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.8rem;
+      font-family: inherit;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      min-width: 2.1rem;
+      text-align: center;
+    }
+    .ilvl-btn:hover { border-color: #7a3010; color: #1a0e04; background: #e0d4b8; }
+    .ilvl-btn.active { background: #7a3010; border-color: #7a3010; color: #fffdf5; }
 
     .type-btn {
       background: #ede5d0;
@@ -350,7 +388,11 @@
 </div>
 
 <div id="type-filter">
-  <input type="text" id="nameFilter" placeholder="Search items…" />
+  <div class="search-wrap">
+    <input type="text" id="nameFilter" placeholder="Search items…" />
+    <button class="clear-btn" id="clearSearch" title="Clear">×</button>
+  </div>
+  <div id="ilvl-filter" class="ilvl-group" style="display:none"></div>
 </div>
 
 <main>
@@ -381,6 +423,10 @@ let replicaItems = [];
 let experimentedItems = [];
 let allItems = [];
 let activeType = 'all';
+const ILVL_RANGE = [82, 83, 84, 85, 86];
+let expIlvlFilter = new Set(
+  JSON.parse(localStorage.getItem('exp_ilvl_filter') || 'null') || [83, 84]
+);
 let minChaosFilter = 20;
 
 function updateLoadBtn() {
@@ -414,9 +460,31 @@ function sortItems(items, mode) {
   return sorted;
 }
 
+function renderIlvlFilter() {
+  const container = document.getElementById('ilvl-filter');
+  container.innerHTML = '<span class="ilvl-label">ilvl:</span>';
+  for (const ilvl of ILVL_RANGE) {
+    const btn = document.createElement('button');
+    btn.className = 'ilvl-btn' + (expIlvlFilter.has(ilvl) ? ' active' : '');
+    btn.textContent = ilvl;
+    btn.addEventListener('click', () => {
+      if (expIlvlFilter.has(ilvl)) expIlvlFilter.delete(ilvl);
+      else expIlvlFilter.add(ilvl);
+      localStorage.setItem('exp_ilvl_filter', JSON.stringify([...expIlvlFilter]));
+      btn.classList.toggle('active', expIlvlFilter.has(ilvl));
+      applyAndRender();
+    });
+    container.appendChild(btn);
+  }
+  container.style.display = 'flex';
+}
+
 function renderTypeFilter() {
   const bar = document.getElementById('type-filter');
   bar.querySelectorAll('.type-btn').forEach(b => b.remove());
+
+  if (currentTab === 'experimented') renderIlvlFilter();
+  else document.getElementById('ilvl-filter').style.display = 'none';
 
   const presentTypes = [...new Set(allItems.map(i => i._category))];
   if (presentTypes.length === 0) { bar.classList.remove('visible'); return; }
@@ -449,7 +517,12 @@ function applyAndRender() {
 
   let preFiltered = allItems;
   if (minChaosFilter > 0) preFiltered = preFiltered.filter(i => i.chaosValue >= minChaosFilter);
-  if (nameQuery) preFiltered = preFiltered.filter(i => i.name.toLowerCase().includes(nameQuery));
+  if (currentTab === 'experimented') preFiltered = preFiltered.filter(i => expIlvlFilter.has(i.levelRequired));
+  if (nameQuery) preFiltered = preFiltered.filter(i =>
+    i.name.toLowerCase().includes(nameQuery) ||
+    (i.baseType || '').toLowerCase().includes(nameQuery) ||
+    (i.itemType || '').toLowerCase().includes(nameQuery)
+  );
 
   document.querySelectorAll('.type-btn').forEach(btn => {
     const type = btn.dataset.type;
@@ -464,6 +537,12 @@ function applyAndRender() {
   renderCards(sorted, league);
   const badge = document.getElementById('count-badge');
   badge.textContent = currentTab === 'replicas' ? `${sorted.length} replicas` : `${sorted.length} items`;
+
+  if (currentTab === 'experimented') {
+    const ilvlSorted = [...expIlvlFilter].sort((a, b) => a - b);
+    document.getElementById('exp-notice').textContent =
+      `Indicative prices — ilvl ${ilvlSorted.join(', ') || '—'}, no influence`;
+  }
 }
 
 function linkDots(n) {
@@ -636,7 +715,14 @@ function switchTab(tab) {
   activeType = 'all';
 
   updateLoadBtn();
-  document.getElementById('exp-notice').style.display = tab === 'experimented' ? 'block' : 'none';
+  const notice = document.getElementById('exp-notice');
+  if (tab === 'experimented') {
+    const ilvlSorted = [...expIlvlFilter].sort((a, b) => a - b);
+    notice.textContent = `Indicative prices — ilvl ${ilvlSorted.join(', ') || '—'}, no influence`;
+    notice.style.display = 'block';
+  } else {
+    notice.style.display = 'none';
+  }
 
   if (allItems.length > 0) {
     renderTypeFilter();
@@ -659,7 +745,16 @@ document.getElementById('filterBtn').addEventListener('click', () => {
 });
 document.getElementById('sortSelect').addEventListener('change', applyAndRender);
 document.getElementById('leagueInput').addEventListener('keydown', e => { if (e.key === 'Enter') load(); });
-document.getElementById('nameFilter').addEventListener('input', applyAndRender);
+document.getElementById('nameFilter').addEventListener('input', () => {
+  document.getElementById('clearSearch').classList.toggle('visible',
+    document.getElementById('nameFilter').value.length > 0);
+  applyAndRender();
+});
+document.getElementById('clearSearch').addEventListener('click', () => {
+  document.getElementById('nameFilter').value = '';
+  document.getElementById('clearSearch').classList.remove('visible');
+  applyAndRender();
+});
 document.querySelectorAll('.tab-btn').forEach(btn => {
   btn.addEventListener('click', () => switchTab(btn.dataset.tab));
 });
