@@ -585,7 +585,7 @@ function renderCards(items, league) {
       nameParts = item.name.replace(/^(Replica) /, '<span class="replica-word">$1</span> ');
       baseDisplay = item.baseType || '';
     } else {
-      poeNinjaUrl = `https://poe.ninja/poe1/economy/${encodeURIComponent(league.toLowerCase())}/base-type/${item.detailsId}`;
+      poeNinjaUrl = `https://poe.ninja/poe1/economy/${encodeURIComponent(league.toLowerCase())}/base-types/${item.detailsId}`;
       nameParts = item.name;
       baseDisplay = (item.itemType || item._category || '') + (item.levelRequired ? ` · ilvl ${item.levelRequired}` : '');
     }
