@@ -410,7 +410,18 @@ const CATEGORY_LABELS = {
   UniqueAccessory: 'Accessories', UniqueFlask: 'Flasks', UniqueJewel: 'Jewels',
   '1H Weapon': '1H Weapons', '2H Weapon': '2H Weapons',
   'Armour': 'Armour', 'Accessory': 'Accessories',
+  'non-replica': 'Nerepliky',
 };
+
+// A non-Replica Heist unique (from the server's EXTRA_UNIQUES list)
+function isNonReplica(item) { return !item.name.includes('Replica'); }
+
+// Does an item belong to the given type-filter bucket?
+function matchType(item, type) {
+  if (type === 'all') return true;
+  if (type === 'non-replica') return isNonReplica(item);
+  return item._category === type;
+}
 
 const EXP_CATEGORY_ORDER = ['1H Weapon', '2H Weapon', 'Armour', 'Accessory'];
 
@@ -493,6 +504,7 @@ function renderTypeFilter() {
   let orderedTypes;
   if (currentTab === 'replicas') {
     orderedTypes = REPLICA_CATEGORIES.filter(c => presentTypes.includes(c));
+    if (allItems.some(isNonReplica)) orderedTypes.push('non-replica');
   } else {
     orderedTypes = EXP_CATEGORY_ORDER.filter(c => presentTypes.includes(c));
   }
@@ -526,13 +538,13 @@ function applyAndRender() {
 
   document.querySelectorAll('.type-btn').forEach(btn => {
     const type = btn.dataset.type;
-    const total   = type === 'all' ? allItems.length    : allItems.filter(i => i._category === type).length;
-    const visible = type === 'all' ? preFiltered.length : preFiltered.filter(i => i._category === type).length;
+    const total   = allItems.filter(i => matchType(i, type)).length;
+    const visible = preFiltered.filter(i => matchType(i, type)).length;
     const label   = type === 'all' ? 'All' : (CATEGORY_LABELS[type] || type);
     btn.textContent = `${label} (${visible} of ${total})`;
   });
 
-  const filtered = activeType === 'all' ? preFiltered : preFiltered.filter(i => i._category === activeType);
+  const filtered = preFiltered.filter(i => matchType(i, activeType));
   const sorted = sortItems(filtered, document.getElementById('sortSelect').value);
   renderCards(sorted, league);
   const badge = document.getElementById('count-badge');
