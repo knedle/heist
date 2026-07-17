@@ -12,6 +12,19 @@ try { if (!fs.existsSync(CACHE_DIR)) fs.mkdirSync(CACHE_DIR); } catch (e) { cons
 
 const CATEGORIES = ['UniqueWeapon', 'UniqueArmour', 'UniqueAccessory', 'UniqueFlask', 'UniqueJewel'];
 
+// Non-Replica unique items to include alongside Replicas (Heist-related uniques)
+const EXTRA_UNIQUES = new Set([
+  "Expedition's End",
+  'Fated End',
+  'Shattershard',
+  'Actum',
+  'The Hidden Blade',
+  'The Fulcrum',
+  'Crest of Desire',
+  'Font of Thunder',
+  'The Iron Mass',
+]);
+
 const EXPERIMENTED_BASE_TYPES = new Set([
   // One-Hand Axes
   'Disapprobation Axe', 'Psychotic Axe',
@@ -203,7 +216,7 @@ const server = http.createServer((req, res) => {
             `https://poe.ninja/poe1/api/economy/stash/current/item/overview?league=${encodeURIComponent(league)}&type=${cat}`
           );
           (data.lines || []).forEach(item => {
-            if (item.name && item.name.includes('Replica')) {
+            if (item.name && (item.name.includes('Replica') || EXTRA_UNIQUES.has(item.name))) {
               item._category = cat;
               items.push(item);
             }
